@@ -1,9 +1,9 @@
 # Goalgorithm
-## Reproducible Possession Recognition and Event-Driven Segmentation (v1 and v2)
+## Reproducible Possession Recognition and Event-Driven Segmentation (Final v2)
 
 Delivery date: November 16, 2026. Competition: More Than a Hack 2027, organized by Metrica Sports, FC Barcelona and Mobile World Capital Barcelona.
 
-**Status: CANDIDATE v2 EXTERNALLY VALIDATED; SAFE v1 BASELINE PRESERVED.** Both `Goalgorithm.csv` (v1) and `artifacts/local_candidates/Goalgorithm_v2.csv` (v2) are locally generated from the authorized tactical bundle, twice byte-reproduced, and verified by the unmodified official validator (`exit 0`). Private competition-match `spellF1` remains unknown; no claim of competition-match leaderboard placement is made prior to organizer scoring.
+**Status: FINAL SUBMISSION v2 PROMOTED AND VALIDATED.** The submitted `Goalgorithm.csv` (`199,319` predictions, SHA-256 `fa7f7fbe568553ff6a795c086f8a69c254f9e04281a634811c1720491e249be2`) is generated deterministically from the authorized tactical bundle using `configs/v2.json` and passes the unmodified official validator (`exit 0`). The prior Phase 1 baseline (`v1`) remains safely backed up at `artifacts/local_backup/Goalgorithm_v1.csv` (`29e2a65b80dcd6b9e0f5e47e781ca4f97ec9d1e3f91c78a6c550c38a60eed089`). Private competition-match `spellF1` remains unknown; no claim of competition-match leaderboard placement is made prior to organizer scoring.
 
 ### 1. Task, Ranking Metric, and Architecture
 
@@ -14,8 +14,8 @@ Goalgorithm preserves the complete Phase 1 (`v1`, `configs/temporal.json`) stack
 | Candidate config | Scope and modules | Primary purpose |
 | --- | --- | --- |
 | `configs/baseline.json` | Official raw reader + smooth50 | Published floor reproduction |
-| `configs/temporal.json` (v1) | Legacy features, tagging, Viterbi | Preserved safety submission |
-| `configs/v2.json` (v2) | Quality, stoppage, control, decoder | Complete candidate v2 |
+| `configs/temporal.json` (v1) | Legacy features, tagging, Viterbi | Preserved backup (`Goalgorithm_v1.csv`) |
+| `configs/v2.json` (v2) | Quality, stoppage, control, decoder | Final promoted submission (`Goalgorithm.csv`) |
 
 <!-- pagebreak -->
 
@@ -114,16 +114,20 @@ On the `2,400`-frame synthetic comparison (`tests.compare_synthetic`), `v2` achi
 
 ## Reproduction, Compliance, and Submission Summary
 
-### 11. Reproducing v1 and Candidate v2 Locally
+### 11. Reproducing the Final Submission (`Goalgorithm.csv`)
 
-Use Python 3.10 or 3.11 with `requirements-goalgorithm.txt` (`numpy==2.2.6`, `pandas==2.3.3`), zero GPU or network calls. Place the authorized bundle in `./data/tactical/` (or set `MTAH_DATA_DIR`):
+Use Python 3.10 or 3.11 with `requirements-goalgorithm.txt` (`numpy==2.2.6`, `pandas==2.3.3`), zero GPU or network calls. Place the authorized bundle in `./data/tactical/` (or set `MTAH_DATA_DIR`), then execute:
+
+```text
+python -X utf8 run_goalgorithm.py --data-dir ./data --config configs/v2.json --output Goalgorithm.csv
+python -X utf8 evaluation/validate_submission.py Goalgorithm.csv
+```
+
+To reproduce the archived Phase 1 baseline (`artifacts/local_backup/Goalgorithm_v1.csv`):
 
 ```text
 python -X utf8 run_goalgorithm.py --data-dir ./data --config configs/temporal.json ^
-  --output Goalgorithm.csv
-python -X utf8 run_goalgorithm.py --data-dir ./data --config configs/v2.json ^
-  --output artifacts/local_candidates/Goalgorithm_v2.csv
-python -X utf8 evaluation/validate_submission.py artifacts/local_candidates/Goalgorithm_v2.csv
+  --output artifacts/local_backup/Goalgorithm_v1_repro.csv
 ```
 
 Verify the deterministic engineering suite without competition assets:
@@ -141,6 +145,6 @@ python -X utf8 -m tests.smoke_full --slots 46 --config configs/v2.json
 
 - **No tuning on competition data or public 5-minute GT**: Parameters in `configs/v2.json` are principled physical constants verified solely on synthetic fixtures and independent public matches (`metrica-sports/sample-data`).
 
-- **Local v1 and v2 verification**: `Goalgorithm.csv` (v1 safety baseline, SHA-256 `29e2a65b80dcd6b9e0f5e47e781ca4f97ec9d1e3f91c78a6c550c38a60eed089`, backed up to `artifacts/local_backup/Goalgorithm_v1.csv`) remains untouched and valid (`validate_submission.py` exit `0`). Candidate `artifacts/local_candidates/Goalgorithm_v2.csv` (`199,319` predictions) passed two independent runs with identical SHA-256 (`fa7f7fbe568553ff6a795c086f8a69c254f9e04281a634811c1720491e249be2`) and passed `evaluation/validate_submission.py` (`exit 0`).
+- **Final submission verification**: `Goalgorithm.csv` (`v2`, `199,319` predictions) passed two independent deterministic local runs with identical SHA-256 (`fa7f7fbe568553ff6a795c086f8a69c254f9e04281a634811c1720491e249be2`) and passed `evaluation/validate_submission.py` (`exit 0`). The Phase 1 submission remains safely archived at `artifacts/local_backup/Goalgorithm_v1.csv` (`29e2a65b80dcd6b9e0f5e47e781ca4f97ec9d1e3f91c78a6c550c38a60eed089`, `validate_submission.py` exit `0`).
 
-- **Submission promotion status**: Based on consistent, statistically substantial improvements across 3 independent real matches (`+0.0906 spellF1` and `+0.2453 macroF1` over `v1` under ATD degradation) plus `51/51` passing unit/adversarial tests and verified deterministic local generation, candidate `v2` is recommended for copying to the final submission path only after the participant inspects local diagnostics/counts independently in their own terminal; `v1` remains immediately usable as the zero-risk fallback.
+- **Promotion basis**: Promoted to `Goalgorithm.csv` based on consistent independent external improvements across 3 real Metrica matches (`+0.0906 spellF1`, `+0.2453 macroF1`, and `+0.6588 D_f1` over `v1` under ATD degradation), `51/51` passing unit/adversarial tests, deterministic `199,319`-frame reproduction, and local validator verification.
