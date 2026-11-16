@@ -1,0 +1,7 @@
+# Optional report generation / visual QA; not used for inference.
+reportlab==4.4.10
+pypdf==6.6.2
+PyMuPDF==1.28.2
+Pillow==12.3.0
+charset-normalizer==3.5.1
+typing_extensions==4.16.0

@@ -79,6 +79,8 @@ env/
 *.parquet
 *.pkl
 *.diagnostics.json
+*.csv
+*.log
 /Goalgorithm.csv
 /artifacts/
 /tmp/
