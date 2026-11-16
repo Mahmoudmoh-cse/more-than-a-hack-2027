@@ -36,7 +36,7 @@ def main():
                    tags={'Team':'Atletic Club','Half':'1st Half'})]
     write_submission(str(out/'synthetic_truth.csv'),truth)
     summary = []
-    for name in ('baseline','geometry','tagging','temporal'):
+    for name in ('baseline', 'geometry', 'tagging', 'temporal', 'v2_stoppage', 'v2_control', 'v2_decoder', 'v2'):
         start = time.perf_counter()
         labels, _ = infer(data,events,replace(Config(),model=name),blocks=[(1,0,2399)])
         duration = time.perf_counter()-start

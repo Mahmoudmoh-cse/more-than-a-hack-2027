@@ -23,6 +23,7 @@ from tests.fixtures import bundle
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--slots', type=int, default=4)
+    parser.add_argument('--config', default=None)
     args = parser.parse_args()
     if args.slots < 2 or args.slots % 2:
         parser.error('slots must be an even positive number >= 2')
@@ -37,8 +38,11 @@ def main():
         hashes = []
         for run in (1, 2):
             path = output/f'synthetic_smoke_{run}.csv'
-            subprocess.run([sys.executable, '-X', 'utf8', str(root/'run_goalgorithm.py'),
-                            '--data-dir', tmp, '--output', str(path)], check=True, cwd=root)
+            cmd = [sys.executable, '-X', 'utf8', str(root/'run_goalgorithm.py'),
+                   '--data-dir', tmp, '--output', str(path)]
+            if args.config:
+                cmd.extend(['--config', str(args.config)])
+            subprocess.run(cmd, check=True, cwd=root)
             hashes.append(hashlib.sha256(path.read_bytes()).hexdigest())
         if hashes[0] != hashes[1]:
             raise AssertionError('repeated full inference is not byte deterministic')
