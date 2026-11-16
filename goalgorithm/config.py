@@ -5,6 +5,19 @@ import json
 import math
 
 
+SUPPORTED_MODELS = {
+    "baseline",
+    "geometry",
+    "tagging",
+    "temporal",
+    "v2_stoppage",
+    "v2_control",
+    "v2_decoder",
+    "v2",
+}
+TAG_MODELS = {"tagging", "temporal", "v2_stoppage", "v2_control", "v2_decoder", "v2"}
+
+
 @dataclass(frozen=True)
 class Config:
     model: str = "temporal"
@@ -26,9 +39,15 @@ class Config:
     restart_lookback_seconds: float = 8.0
     outside_margin: float = 0.6
     outside_seconds: float = 0.5
+    # v2-specific parameters (unused by v1 models; defaults preserved for backward compatibility)
+    dead_enter_cost: float = 4.5
+    dead_exit_cost: float = 4.5
+    memory_weight: float = 0.55
+    pass_bridge_weight: float = 0.65
+    restart_prior_weight: float = 0.35
 
     def validate(self):
-        if self.model not in {"baseline", "geometry", "tagging", "temporal"}:
+        if self.model not in SUPPORTED_MODELS:
             raise ValueError("unsupported model in configuration")
         if type(self.baseline_window) is not int or self.baseline_window < 0:
             raise ValueError("baseline_window must be a nonnegative integer")

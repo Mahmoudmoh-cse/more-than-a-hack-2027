@@ -12,7 +12,7 @@ import time
 import tracemalloc
 
 from games import GAME, GAMES, asset_paths, half_video_blocks
-from goalgorithm.config import load_config
+from goalgorithm.config import TAG_MODELS, load_config
 from goalgorithm.diagnostics import peak_rss_mib
 from goalgorithm.data import load_inputs
 from goalgorithm.model import infer
@@ -24,7 +24,7 @@ def run(args):
     start = time.perf_counter()
     if args.profile:
         tracemalloc.start()
-    tracking, events = load_inputs(args.data_dir, need_tags=config.model in {"tagging", "temporal"})
+    tracking, events = load_inputs(args.data_dir, need_tags=config.model in TAG_MODELS)
     if config.model == "baseline":
         from starter.baseline import nearest_player_labels, smooth
         paths = asset_paths(data_dir=args.data_dir)
