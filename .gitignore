@@ -62,3 +62,25 @@ __pycache__/
 venv/
 env/
 .DS_Store
+
+# Goalgorithm local artifacts and restricted assets, wherever accidentally placed.
+*.zip
+*.7z
+*.tar
+*.gz
+*.avi
+*.mov
+*_atd.txt
+*_atd.xml
+*_smart_tagging.xml
+*_homography.csv
+*.npy
+*.npz
+*.parquet
+*.pkl
+*.diagnostics.json
+/Goalgorithm.csv
+/artifacts/
+/tmp/
+/output/
+!Goalgorithm.pdf
