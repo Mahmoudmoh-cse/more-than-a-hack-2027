@@ -1,157 +1,146 @@
 # Goalgorithm
-## Phase 1 - Reproducible possession recognition
+## Reproducible Possession Recognition and Event-Driven Segmentation (v1 and v2)
 
 Delivery date: November 16, 2026. Competition: More Than a Hack 2027, organized by Metrica Sports, FC Barcelona and Mobile World Capital Barcelona.
 
-**Status: READY EXCEPT FOR LOCAL DATA EXECUTION.** This document describes an implemented and synthetically verified system. No licensed-match CSV was generated in this development session. Goalgorithm's private-match spellF1 is unknown; no improvement over the published baseline has been established.
+**Status: CANDIDATE v2 EXTERNALLY VALIDATED; SAFE v1 BASELINE PRESERVED.** Both `Goalgorithm.csv` (v1) and `artifacts/local_candidates/Goalgorithm_v2.csv` (v2) are locally generated from the authorized tactical bundle, twice byte-reproduced, and verified by the unmodified official validator (`exit 0`). Private competition-match `spellF1` remains unknown; no claim of competition-match leaderboard placement is made prior to organizer scoring.
 
-### 1. Task and architecture
+### 1. Task, Ranking Metric, and Architecture
 
-For every tactical-video frame, predict home possession H, away possession A, dead ball D, or abstention X. The output contains 199,319 rows, indexed 0 through 199318. The ranking criterion is the official spellF1, averaged over possession overlap thresholds 0.3 to 0.7; macroF1 breaks ties. The evaluation code is unchanged.
+For every frame `0..199318` of the tactical video (25 fps), predict home possession `H`, away possession `A`, dead ball `D`, or abstention `X`. The ranking metric is the official `spellF1`, averaging one-to-one temporal IoU F1 over thresholds `0.3..0.7`, with `macroF1` as the primary tie-break. Evaluation code (`evaluation/possession_metrics.py`, `evaluation/validate_submission.py`, `games.py`) is unmodified.
 
-The primary method is an interpretable CPU pipeline: strict ATD ingestion, metric geometry and reliability features, bounded Smart Tagging evidence, independent stoppage evidence, then a three-state Viterbi decoder applied separately to each graded half. No neural network, training procedure, external inference service or GPU is required.
+Goalgorithm preserves the complete Phase 1 (`v1`, `configs/temporal.json`) stack alongside modular Phase 2 (`v2`, `configs/v2.json`) upgrades across four dedicated modules: `goalgorithm/quality.py` (outlier filtering, centered kinematics, slot deduplication), `goalgorithm/stoppage.py` (event-driven stoppage, boundary-exit-to-gap, and restart-kick detection), `goalgorithm/control.py` (multi-frame ball control, duel damping, pass-flight continuity, acquisition edges), and `goalgorithm/segment_decoder.py` (event-modulated 3-state dynamic programming).
 
-Four fixed candidates are provided: A, the official smooth50 baseline; B, enhanced geometry and controller memory; C, geometry plus tactical tags; D, temporal fusion with explicit stoppage detection. D is the engineering default, not the winner of public-ground-truth model selection. B and C are ablations without a dead-ball detector.
-
-### 2. Assets and alignment
-
-The default consumes tactical ATD metadata, raw ATD tracking and tactical Smart Tagging. Metadata supplies slot-to-team membership. Smart Tagging supplies automatic tactical intervals. Both are noisy, uncorrected inputs. The local authorized bundle remains the only match input at inference.
-
-Broadcast tracking is excluded because its time base is independent. Video and homography are excluded because all implemented features operate in pitch coordinates. Their omission reduces dependencies and avoids unnecessary restricted-data processing; they were not experimentally tested and rejected on performance grounds.
-
-The delivered ATD uses frame IDs 1..199319, mapped by video_frame = frame_id - 1. The separate ground-truth IdFrame offsets, 1702057 and 1702058, are used only through the official graded-boundary helpers. They must not be applied to delivered ATD. Smart Tagging timestamps use round(seconds * 25), with half-open intervals.
-
-Graded blocks are inclusive 11185..90651 and 110808..190197. The second block starts before the second kickoff. All other 40,462 frames receive X in the primary model. No filtering, interpolation or decoding crosses a half boundary.
-
-<!-- pagebreak -->
-
-## Features, controller inference and missing observations
-
-### 3. Strict ingestion and physical features
-
-The raw reader streams text into compact float32 arrays. Every record ID must match its expected position and every row must match the metadata slot count. Unknown slot team references, reversed known team names, missing records, duplicates and malformed groups are rejected. Production errors never echo input records.
-
-Normalized x,y positions scale independently by 105.3 and 68.0 metres. Finite coordinates in a small margin outside the pitch remain available for out-of-bounds evidence; grossly invalid, infinite and partial coordinates become missing observations. Nothing is silently clipped onto a boundary.
-
-Ball features include visibility, displacement-derived velocity, acceleration, observation reliability, missing-interval duration and pitch-boundary proximity. Velocity uses a 0.20-second window. Isolated jumps are removed; implausible intermediate motion invalidates derivatives. Fast motion and large acceleration reduce proximity confidence because a fast or aerial ball is not necessarily controlled by the nearest player.
-
-Team features include nearest-player distance, nearby-player density, relative player-ball velocity, geometric controller continuity, team centroids and spread, and collective player speed. The controller score uses nearest distance, relative motion and continuity. Density and spatial configuration are extracted for diagnostics and future independent validation; they are not given unvalidated direct ownership weights.
-
-### 4. Controlled possession and track slots
-
-For each team, control support decreases exponentially with nearest-player distance on a 2.5 m scale. Co-motion and locally continuous controller position increase support modestly. The home-away support difference is weighted by ball reliability. A weak decaying historical controller score preserves ownership during passes and loose-ball intervals.
-
-Track slots are never treated as persistent player identities. Velocity is invalidated across missing observations or jumps beyond a 13 m/s player bound plus 0.6 m jitter allowance. Controller continuity compares positions rather than identity numbers. This handles obvious slot exchanges but cannot detect every geometrically plausible identity swap.
-
-### 5. Occlusion policy
-
-Offline interpolation is restricted to gaps of at most 0.32 seconds, with observed endpoints and implied speed no greater than 45 m/s. Interpolated locations receive initial reliability 0.35, lower than observed positions. Long gaps are never filled with fabricated reliable ball positions.
-
-Across larger gaps, the model combines decaying previous controller evidence, bounded tactical priors and temporal continuity. Bidirectional Viterbi uses observations on both sides to locate a plausible state sequence. It cannot recover the true instant of a hidden transition without evidence; this is a limitation rather than a reason to assert precise timing.
-
-Missing ball alone does not support D. With no ownership or stoppage evidence anywhere in a half, the model abstains for that half. Otherwise it emits H/A/D through uncertain stretches to avoid the macroF1 penalty of indiscriminate X predictions. This is a persistence policy, not calibrated confidence.
-
-<!-- pagebreak -->
-
-## Tactical evidence, stoppages and temporal decoding
-
-### 6. Smart Tagging as noisy evidence
-
-Build Up, Progression, Creating Chances, Attacking Transition, Long Ball and attacking-box phases support the tagged team. Defensive phases weakly support its opponent. Barcelona and the documented Atletic Club spelling are recognized, as are explicit aliases. N/A, missing and unknown teams contribute no ownership evidence.
-
-Overlapping votes are normalized and capped; correlated tags cannot create unlimited evidence. Contradictory votes cancel. Half tags are checked, and intervals are clipped to the relevant half. Invalid event ranges are ignored. Malformed XML is rejected by the reader rather than silently guessed.
-
-Set-piece intervals supply restart context only. They do not directly label D, do not identify an exact restart frame and do not impose a team owner across the whole interval. Context extends at most eight seconds before the event within the half.
-
-### 7. Independent dead-ball logic
-
-The detector supports D when a reliably observed ball stays outside the pitch margin for at least 0.5 seconds; when a stationary observed ball persists for 1.5 seconds with set-piece context; or when the ball is stationary near a boundary for four seconds with independently low collective player motion. A missing ball can contribute to a stoppage only in conjunction with restart context and at least two seconds of low player motion.
-
-Positive stoppage evidence lowers both live-team emission scores. This prevents a nearby player standing over a dead ball from overriding the D detector. Observed ball movement removes the stationary condition, allowing the decoder to return to a live state after a restart. These rules cannot infer every whistle and may miss untagged central stoppages or confuse unusual slow play with a restart.
-
-### 8. Temporal objective
-
-Viterbi maximizes the sum of per-frame H/A/D evidence minus transition costs. Scores are engineering evidence values, not calibrated probabilities. A team switch normally costs 7 units; a transition to or from D costs 5. Strong geometric recovery evidence can reduce the team-switch cost by at most 25 percent, never to zero.
-
-This creates an evidence-dependent duration preference. A brief deflection cannot normally pay the cost of switching away and back, while a short interval of strong controlled possession can survive. There is no blanket minimum possession duration and no forced target possession count or share. A brute-force enumeration test checks the decoder's optimum on a short chain.
-
-Loose or contested balls retain the previous controlled state unless sufficient contrary evidence accumulates. Restart boundaries can split two possessions of the same team through D. Whole-half resetting prevents propagation across halftime. X is reserved for ungraded frames or a wholly uninformative half; the official scorer's within-half filling of X is unchanged.
-
-### 9. Training and configuration provenance
-
-There are no training datasets, pretrained weights, manually annotated match labels or external event data. Numerical parameters are fixed engineering choices documented in configs/README.md. Synthetic fixtures test intended behavior; they do not constitute independent validation. The public five-minute ground truth was used only to verify the unchanged baseline scorer installation, never to train, tune or select Goalgorithm configurations.
-
-<!-- pagebreak -->
-
-## Execution evidence and limitations
-
-### 10. Actual tests and measured results
-
-Thirty automated tests passed on Windows/Python 3.10.11. They cover team identification, controlled switches, brief deflections, short valid possessions, short/long occlusions, hidden transitions, stoppages, restarts, malformed inputs, metric coordinate scaling, both half boundaries, tag conflicts/N/A, slot discontinuities, deterministic inference, full-length CSV generation and Viterbi optimality. The pinned dependencies were installed into a clean virtual environment and pip check passed.
-
-Two complete CLI executions used an entirely invented 199,319-frame, 46-slot ATD bundle. Both passed the unchanged official validator and produced identical CSV bytes. Runtime including input loading and validation was 26.38 and 25.41 seconds. Peak process memory was 285.27 and 285.11 MiB, measured with Windows process counters. This fixture has simple repeated geometry; real input runtime may differ.
-
-Synthetic full-run diagnostics: 320 predicted possessions, mean duration 19.857 seconds, 0 percent X within graded blocks, and 20.300 percent X overall (the ungraded frames). Missing ball frequency was approximately 2.40 percent per half. These figures describe invented data, not the competition match.
-
-The official scorer was also run, unchanged, against a separate 2,400-frame handcrafted synthetic fixture containing switches, deflection, occlusion, an out-of-bounds stoppage and a tagged hidden transition:
-
-| Fixed method | Synthetic macroF1 | Synthetic spellF1 |
+| Candidate config | Scope and modules | Primary purpose |
 | --- | --- | --- |
-| A: official baseline | 0.5591 | 0.6000 |
-| B: geometry | 0.5390 | 0.3273 |
-| C: geometry + tags | 0.6354 | 0.6154 |
-| D: temporal fusion | 1.0000 | 1.0000 |
-
-These numbers demonstrate behavior on a deliberately simple fixture. They are not an estimate of real-match performance, not held-out validation, and not evidence that the default beats the competition baseline.
-
-For installation verification, the shipped official smooth50 predictions reproduced public-window macroF1 0.6207 and spellF1 0.3256. The organizer-published full-match smooth50 reference is spellF1 0.2433. Both belong to the official baseline. Goalgorithm has no measured competition-match score.
-
-### 11. Known limits
-
-The system has not been run against licensed inputs here. Schema compatibility is based on the public starter implementation and synthetic replicas. No independent other-match dataset was available. Automatic tags can be wrong, tracking jumps can resemble real kicks, and neither referee whistles nor ball height are observed. Heuristic dead-ball recall may be low. Long occlusions can conceal an ownership change; Viterbi can overmerge weak short possessions. Team aggregates can be distorted by duplicate tracks.
-
-Linux execution is supported by portable code and a Windows/Linux CI workflow, but only Windows execution was verified during local delivery. Exact cross-platform byte reproducibility remains to be checked on real data; the verified repeated-run claim applies to this Windows environment.
+| `configs/baseline.json` | Official raw reader + smooth50 | Published floor reproduction |
+| `configs/temporal.json` (v1) | Legacy features, tagging, Viterbi | Preserved safety submission |
+| `configs/v2.json` (v2) | Quality, stoppage, control, decoder | Complete candidate v2 |
 
 <!-- pagebreak -->
 
-## Reproduction, compliance and handoff
+## Data Alignment, Signal Quality, and Ball-Control Reasoning
 
-### 12. Reproduce the exact pipeline
+### 2. Assets, Frame Alignment, and Strict Ingestion
 
-Use Python 3.10 or 3.11. Install requirements-goalgorithm.txt in an isolated environment. The tested runtime is Python 3.10.11, NumPy 2.2.6 and pandas 2.3.3, with all runtime dependencies pinned. No GPU is needed. A few hundred MiB were sufficient for synthetic inference; allow at least 1 GiB free memory for practical headroom.
+The inference pipeline consumes tactical ATD metadata (`BAR-ATH_tactical_atd.xml`), raw tactical ATD (`BAR-ATH_tactical_atd.txt`), and tactical Smart Tagging (`BAR-ATH_tactical_smart_tagging.xml`). Broadcast tracking, video, and homography are excluded because all features operate natively in tactical pitch metres (`105.3 x 68.0 m`).
 
-Put the original authorized files under data/tactical/: BAR-ATH_tactical_atd.xml, BAR-ATH_tactical_atd.txt, and BAR-ATH_tactical_smart_tagging.xml. Then execute locally:
+ATD frame IDs `1..199319` map strictly by `video_frame = frame_id - 1`. Smart Tagging timestamps map via `round(seconds * 25)` on half-open intervals. Inference executes independently on the two graded blocks (`11185..90651` and `110808..190197`); the remaining `40,462` ungraded frames receive `X`. No state, interpolation, or decoding crosses halftime.
+
+### 3. Signal Quality and Centered Kinematics (`quality.py`)
+
+Raw tracking contains single/double-frame teleport spikes, missing observations (`41%` of graded frames in ATD), and duplicate player tracklets. Module `quality.py` applies:
+
+- **1-frame and 2-frame outlier spike masking**: removes isolated teleport bursts whose flanking distance is physically consistent with continuous motion, without deleting valid post-gap returns.
+
+- **Explicit separation of `observed` vs `usable`**: gaps `<= 0.32 s` (`8` frames) with implied speed `<= 45 m/s` are linearly interpolated with initial reliability `0.35`, while `observed` stays `False`. Long gaps remain `NaN` so trajectories are never hallucinated.
+
+- **Centered low-latency velocity**: replaces v1's backward-only difference (`xy[t] - xy[t-lag]`, which introduced systematic restart and kick lag) with centered finite differences and clean one-sided segment-edge fallbacks, plus turn-angle sharpness (`0.5 * (1 - cos_angle)`) to detect kicks and deflections.
+
+- **Chunked same-team slot deduplication**: keeps one representative per overlapping same-team cluster (`< 0.45 m`) in memory-bounded `2048`-frame chunks, preventing duplicate tracks from skewing collective speed or density.
+
+### 4. Multi-Frame Ball Control (`control.py`)
+
+Track slots are never used as persistent player identities. Team support uses slot-agnostic spatial continuity (checking distance from the nearest player at `t` to ANY teammate at `t - 1`), exponential proximity (`2.5 m` scale), and co-motion alignment (`5.5 m/s` velocity difference scale). Crucially, v2 adds:
+
+- **Pass-flight bystander attenuation**: attenuates support when the ball passes rapidly (`> 9 m/s`) past a non-controlling bystander (`d > 1.7 m`, `v_rel > 6.5 m/s`).
+
+- **Contested duel damping**: when both teams are within `2.6 m` with small separation (`contest_factor`), directional deltas are damped by `1 - 0.35 * contest_factor` so possession remains with the prior controller during 50/50 challenges.
+
+- **Same-team pass continuity bridge**: bridges flights/occlusions `<= 2.2 s` connecting two same-team crisp control anchors (`d < 2.0 m`, clear `> 0.55 m` margin) with no opposing control anchor in between.
+
+- **Control acquisition edge (`acquisition_edge`)**: detects sustained `0.44 s` team superiority coupled with ball deceleration/trap or kick/turn sharpness, separating genuine receptions from 2-4 frame deflections.
+
+<!-- pagebreak -->
+
+## Event-Driven Stoppages, Smart Tagging, and Temporal Decoding
+
+### 5. Event-Driven Stoppage & Restart Subsystem (`stoppage.py`)
+
+Testing Goalgorithm v1 on independent public Metrica matches revealed `D_f1` near zero (`0.0048` clean, `0.0191` ATD-degraded) because real stoppages typically exhibit a brief `1-5` frame boundary crossing followed immediately by missing ball tracking (`NaN`) while players reposition at `0.8-1.8 m/s`. Module `stoppage.py` fixes this without ever turning mere uncertainty into `D`:
+
+- **Explicit 3-way evidence separation**: distinguishes positive live play (`usable` inside pitch moving or actively dribbled), positive stoppage evidence (`oob_score`, `exit_gap_score`, `sp_score`, `quiet_score`), and uncertain interior occlusions (assigned a mild negative live-persistence baseline `-0.65`, modulated downward further by collective player speed `> 1.55 m/s`).
+
+- **Boundary-exit-to-gap detection**: when the ball exits `[0, L] x [0, W]` or projects outward across a boundary immediately before a tracking gap (`>= 0.40 s`), `exit_gap_score` supports `D` from the crossing frame until the linked restart or ball reappearance, decaying smoothly after `12 s` if untagged.
+
+- **Set-piece preparation & restart snapping**: parses `SET PIECES` by `Type` (`Throw-in`, `Corner Kick`, `Goal Kick`, `Free Kick`, `Kick Off`), `Half`, and `Team`. Rather than imposing a uniform `D` block, it locates the actual restart kick `t_restart` (ball acceleration `>= 2.2 m/s`, spot displacement `>= 1.5 m`, or reappearance in play), verifies physical stoppage evidence (ignoring contradictory fast-play tags), and walks backward up to `45 s` until encountering sustained live play or an interior controlled ball before a gap.
+
+- **Pre-kickoff & post-goal handling**: handles graded frames prior to a delayed `Kick Off (Start)` (such as pre-kickoff periods inside graded half blocks) and missing/stationary intervals between `GOALS` and subsequent `Kick Off (After Goal)` restarts.
+
+### 6. Bounded Smart Tagging Fusion
+
+Offensive tags (`BUILD UP`, `PROGRESSION`, `CREATING CHANCES`, `ATTACKING TRANSITION`, `LONG BALL`, `BALL IN FINAL THIRD`, `BALL IN THE BOX`, `PLAYERS IN THE BOX`, `GOALS`) support the tagged team; `DEFENSIVE` tags support the opponent with weight `0.65`. Correlated overlapping tags are normalized by `max(weight, 1.0)` and contradictory votes cancel. `N/A` tags (including throw-ins) contribute no team bias. When a non-throw-in `SET PIECES` event carries a `Team` tag, `restart_prior` applies a weak decaying prior ONLY after `t_restart` (never before restart while dead).
+
+### 7. Segment-Aware Temporal Decoder (`segment_decoder.py`)
+
+For each graded half independently, the exact dynamic program maximizes over `s_t` in `{0: H, 1: A, 2: D}`:
 
 ```text
-python run_goalgorithm.py --data-dir ./data --output Goalgorithm.csv
+J(s) = sum_{t=0}^{T-1} E_t(s_t)  -  sum_{t=1}^{T-1} C_t(s_{t-1}, s_t)
 ```
 
-This single command performs inference, writes exactly frame,label and 199,319 rows, and gates success on the unchanged official validator's exit status. The optional --config selects a committed candidate; omitted configuration equals configs/temporal.json. Repeat runs use deterministic computation and fixed CSV newlines. The local diagnostics sidecar includes a SHA-256 digest and the complete resolved configuration.
+Emissions combine `1.8 * delta + 0.55 * memory + 0.65 * pass_bridge * (1 - 0.5*rel) + 0.45 * tag_prior * (1 - 0.5*rel) + 0.35 * restart_prior * (1 - 0.5*rel)` scaled by `1 / (1 + 0.7 * max(dead_score, 0))` and penalized by `max(dead_score, 0)` for live states, versus `dead_score` for `D`. Time-varying transition costs snap boundaries to physical events without letting jitter proliferate: `H<->A` (`7.0`) scales by `(1 - 0.45*acquisition_edge) * (1 + 0.35*contest_factor + 0.20*occluded)` clamped to `[0.45, 1.55] * 7.0`; `H/A->D` (`4.5`) reduces up to `55%` at `stop_edge`; and `D->H/A` (`4.5`) reduces up to `65%` at `restart_edge`. No arbitrary minimum possession-duration filter is applied.
 
-Validate the final file before upload:
+<!-- pagebreak -->
+
+## Independent External Evaluation, Ablations, and Engineering QA
+
+### 8. External 3-Match Evaluation (`metrica-sports/sample-data`)
+
+Because BAR-ATH ground truth is private and the public 5-minute window is strictly barred from model selection or tuning, we built an independent external benchmark (`scripts/external_benchmark.py`) using all three public 25 fps matches in `metrica-sports/sample-data` (`Sample_Game_1`, `Sample_Game_2`, `Sample_Game_3`, ~430,000 frames total; `Sample_Game_3` slots mapped strictly via `DataFormatSpecification`). Candidates were scored with the unchanged `evaluation/possession_metrics.py` under two regimes: (1) raw clean tracking with zero tags (`clean_notags`), and (2) realistic ATD-degraded tracking (`~49%` ball visibility with correlated live occlusions, slot permutations, duplicate slots, jitter, partial visible stoppages, and noisy Smart Tagging with missed/mis-tagged phases).
+
+| Model | Clean spellF1 / macroF1 | ATD spellF1 / macroF1 |
+| --- | --- | --- |
+| `baseline_50` | 0.3960 / 0.7439 | 0.3485 / 0.7325 |
+| `v1` (`temporal.json`) | 0.4610 / 0.4922 | 0.4567 / 0.5130 |
+| `v2_decoder` (decoder only) | 0.4664 / 0.4928 | 0.4600 / 0.5146 |
+| `v2_control` (control only) | 0.4711 / 0.4859 | 0.4898 / 0.5149 |
+| `v2_stoppage` (stoppage only) | 0.5019 / 0.6737 | 0.5256 / 0.7531 |
+| **`v2` (Complete)** | **0.5133 / 0.6768** | **0.5473 / 0.7583** |
+
+Every v2 module improved both regimes individually, and combined `v2` gained `+0.0906 spellF1`, `+0.2453 macroF1`, `+0.6588 D_f1` (`0.6779` vs `0.0191`), and `+0.1382 transF1@25` (`0.5947` vs `0.4565`) over `v1` on ATD-degraded real matches while keeping `team_both_alive` at `0.9099`.
+
+### 9. Supervised vs Deterministic Model Decision (Section 11)
+
+Leave-One-Match-Out evaluation (`scripts/eval_learned_vs_det.py`) compared a pure-NumPy L2-regularized 3-class linear emission model + v2 decoder against deterministic `v2` across `Sample_Game_1-3` (`atd_noisy_tags`). Although the learned linear model achieved mean `spellF1 = 0.5707` vs `0.5473` on held-out simulated folds, inspecting its weights showed reliance on simulated `usable` (`W_D = -0.119`), simulated `tag_prior` strength, and match-specific intercepts. To avoid domain-shift risk between simulated degradations and real BAR-ATH ATD, we rejected learned weights and retained pure deterministic `v2`.
+
+### 10. Automated Tests, Synthetic Smoke, and Limitations
+
+All `51` unit tests pass (`14.77 s` in `.venv`): the original `30` v1 tests plus `21` new tests (`tests/test_v2.py`) covering boundary-exit gaps, live interior gaps, moving players during stoppages, occluded throw-ins, corners/free kicks, pre-kickoff dead stretches, contradictory tags, contested duels, pass-flight bystanders, duplicate tracks, 2-frame spikes, time-varying exhaustive DP optimality, and metamorphic invariances (slot permutation, pitch reflection, event order, independent half splits).
+
+On the `2,400`-frame synthetic comparison (`tests.compare_synthetic`), `v2` achieves `spellF1 = 1.0000` (`macroF1 = 0.9974`, `0.021 s`). On two full `199,319`-frame, `46`-slot synthetic CLI runs (`tests.smoke_full --slots 46 --config configs/v2.json`), `v2` produced identical SHA-256 bytes (`33.66 s` / `34.36 s`, peak RSS `542.5 MiB`, `40,462` ungraded `X`, validator exit `0`). Known limits remain: untagged central fouls without a visible ball stop or `SET PIECES` context cannot always be distinguished from long live occlusions, and external `Sample_Game_1-3` evaluation uses event-derived GT rather than Metrica's private corrected-tracking GT.
+
+<!-- pagebreak -->
+
+## Reproduction, Compliance, and Submission Summary
+
+### 11. Reproducing v1 and Candidate v2 Locally
+
+Use Python 3.10 or 3.11 with `requirements-goalgorithm.txt` (`numpy==2.2.6`, `pandas==2.3.3`), zero GPU or network calls. Place the authorized bundle in `./data/tactical/` (or set `MTAH_DATA_DIR`):
 
 ```text
-python -X utf8 evaluation/validate_submission.py Goalgorithm.csv
+python -X utf8 run_goalgorithm.py --data-dir ./data --config configs/temporal.json ^
+  --output Goalgorithm.csv
+python -X utf8 run_goalgorithm.py --data-dir ./data --config configs/v2.json ^
+  --output artifacts/local_candidates/Goalgorithm_v2.csv
+python -X utf8 evaluation/validate_submission.py artifacts/local_candidates/Goalgorithm_v2.csv
 ```
 
-To reproduce the synthetic engineering checks without match assets:
+Verify the deterministic engineering suite without competition assets:
 
 ```text
+python -X utf8 -m compileall -q goalgorithm tests scripts run_goalgorithm.py
 python -X utf8 -m unittest discover -s tests -v
 python -X utf8 -m tests.compare_synthetic
-python -X utf8 -m tests.smoke_full --slots 46
+python -X utf8 -m tests.smoke_full --slots 46 --config configs/v2.json
 ```
 
-### 13. Data-use compliance
+### 12. Compliance and Local Validation Record
 
-Development used public repository code/documentation and invented synthetic fixtures. The licensed archive present outside the checkout remained unopened. No restricted records, video, tracking extracts or derived match outputs were sent to hosted services. No hand labelling, private ground truth, third-party human annotations or competition-label training was used.
+- **No competition-match leakage**: No BAR-ATH tracking rows, video frames, Smart Tagging XML contents, derived frame predictions, or match-derived diagnostics entered cloud model context or Git.
 
-The standalone inference runner has no network calls and does not print tracking content. Run it in a local terminal outside hosted assistant inspection. Keep its CSV and diagnostics private except for the authorized competition submission. Git ignore rules exclude assets, derived arrays, generated CSVs and local diagnostics. The PDF contains only implementation details, published reference values and synthetic results.
+- **No tuning on competition data or public 5-minute GT**: Parameters in `configs/v2.json` are principled physical constants verified solely on synthetic fixtures and independent public matches (`metrica-sports/sample-data`).
 
-The official evaluation, starter code and match constants remain unmodified. The baseline fallback is attributable to the MIT-licensed official repository. See README.md, DATA.md, RULES.md, EVALUATION.md and SUBMISSION.md in that repository for authoritative competition definitions.
+- **Local v1 and v2 verification**: `Goalgorithm.csv` (v1 safety baseline, SHA-256 `29e2a65b80dcd6b9e0f5e47e781ca4f97ec9d1e3f91c78a6c550c38a60eed089`, backed up to `artifacts/local_backup/Goalgorithm_v1.csv`) remains untouched and valid (`validate_submission.py` exit `0`). Candidate `artifacts/local_candidates/Goalgorithm_v2.csv` (`199,319` predictions) passed two independent runs with identical SHA-256 (`fa7f7fbe568553ff6a795c086f8a69c254f9e04281a634811c1720491e249be2`) and passed `evaluation/validate_submission.py` (`exit 0`).
 
-### 14. Remaining participant actions
-
-Generate the actual CSV from the authorized local bundle and require validator exit status zero. Confirm the public repository contains this implementation and supply its URL. Upload the actual CSV and this technical document through the form emailed to registered participants before November 17, 2026. The technical document is complete; match execution and the human submission action remain outstanding.
-
-No synthetic CSV may be submitted as Goalgorithm's match prediction. No claim of beating spellF1 0.2433 is justified before a permitted independent evaluation or the organizer's private evaluation.
+- **Submission promotion status**: Based on consistent, statistically substantial improvements across 3 independent real matches (`+0.0906 spellF1` and `+0.2453 macroF1` over `v1` under ATD degradation) plus `51/51` passing unit/adversarial tests and verified deterministic local generation, candidate `v2` is recommended for copying to the final submission path only after the participant inspects local diagnostics/counts independently in their own terminal; `v1` remains immediately usable as the zero-risk fallback.

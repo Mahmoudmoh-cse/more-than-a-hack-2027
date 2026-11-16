@@ -78,7 +78,7 @@ def main():
         canvas.line(48,45,width-48,45)
         canvas.setFont('Helvetica',8)
         canvas.setFillColor(colors.HexColor('#526679'))
-        canvas.drawString(48,31,'GOALGORITHM  |  PHASE 1  |  IMPLEMENTATION AND SYNTHETIC QA')
+        canvas.drawString(48,31,'GOALGORITHM  |  V1 & V2  |  IMPLEMENTATION AND EXTERNAL QA')
         canvas.drawRightString(width-48,31,str(doc.page))
         canvas.restoreState()
     document = SimpleDocTemplate(str(ROOT/'Goalgorithm.pdf'),pagesize=A4,
