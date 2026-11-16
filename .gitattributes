@@ -1,0 +1,2 @@
+# Keep binary PDF offsets intact under Windows core.autocrlf.
+*.pdf binary

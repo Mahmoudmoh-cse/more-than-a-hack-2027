@@ -15,7 +15,7 @@ Date: 2026-11-16. Status: **READY EXCEPT FOR LOCAL DATA EXECUTION**.
 - Executed two full-size, 199319-frame, 46-slot synthetic CLI runs. Both official validations passed; outputs have identical SHA-256. Times 26.38/25.41 s; peak process memory 285.27/285.11 MiB.
 - Generated README, technical Markdown, five-page PDF, configuration guide and acceptance record. Rendered and visually reviewed all five PDF pages.
 - Added Windows/Linux synthetic CI and staged-path data-leak guard. Reviewed exclusions and kept generated CSVs/diagnostics/assets out of Git.
-- Created audit and implementation commits. Authenticated Git push dry-run succeeded; final documentation publication is the remaining packaging step.
+- Published the audit, implementation and technical documentation to the requested GitHub repository; remote main matched commit 435d9b5. Final packaging review also added a PDF binary attribute to prevent Windows newline conversion on future checkouts.
 
 ## Remaining participant actions
 

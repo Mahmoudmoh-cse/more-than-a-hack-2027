@@ -12,7 +12,7 @@ import sys
 def main():
     raw = subprocess.check_output(['git','diff','--cached','--name-only','--diff-filter=ACMR','-z'])
     paths = raw.decode('utf-8').split('\0')
-    allowed_top = {'.gitignore','run_goalgorithm.py','requirements-goalgorithm.txt',
+    allowed_top = {'.gitignore','.gitattributes','run_goalgorithm.py','requirements-goalgorithm.txt',
                    'requirements-report.txt','Goalgorithm.pdf'}
     allowed_dirs = {'goalgorithm','tests','configs','scripts','.github'}
     allowed_suffixes = {'.py','.md','.json','.yml','.yaml'}
