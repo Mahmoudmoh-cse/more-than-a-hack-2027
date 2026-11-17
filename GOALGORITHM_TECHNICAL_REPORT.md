@@ -1,6 +1,9 @@
 # Goalgorithm
 ## Reproducible Possession Recognition and Event-Driven Segmentation (Final v2)
 
+**Prepared by:** Mahmoud Mohamed Fathy and Youssef Adel  
+**Team:** Goalgorithm
+
 Delivery date: November 16, 2026. Competition: More Than a Hack 2027, organized by Metrica Sports, FC Barcelona and Mobile World Capital Barcelona.
 
 **Status: FINAL SUBMISSION v2 PROMOTED AND VALIDATED.** The submitted `Goalgorithm.csv` (`199,319` predictions, SHA-256 `fa7f7fbe568553ff6a795c086f8a69c254f9e04281a634811c1720491e249be2`) is generated deterministically from the authorized tactical bundle using `configs/v2.json` and passes the unmodified official validator (`exit 0`). The prior Phase 1 baseline (`v1`) remains safely backed up at `artifacts/local_backup/Goalgorithm_v1.csv` (`29e2a65b80dcd6b9e0f5e47e781ca4f97ec9d1e3f91c78a6c550c38a60eed089`). Private competition-match `spellF1` remains unknown; no claim of competition-match leaderboard placement is made prior to organizer scoring.
